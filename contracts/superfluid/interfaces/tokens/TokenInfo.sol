@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPLv3
-pragma solidity >= 0.5.0;
+pragma solidity 0.8.4;
 
 /**
  * @dev ERC20 token info interface

@@ -18,5 +18,14 @@ def deployer():
     yield accounts[1]
 
 @pytest.fixture
-def contracts(accounts):
-    sub = SubscriptionService.deploy()
+def contracts(accounts, deployer):
+    sub = SubscriptionService.deploy(
+        "test", 
+        "test",
+        constants_mainnet.HOST,
+        constants_mainnet.CFA,
+        constants_mainnet.DAIx,
+        constants_mainnet.FLOW,
+        {"from": deployer} 
+        )
+    yield sub 

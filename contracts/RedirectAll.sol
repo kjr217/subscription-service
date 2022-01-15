@@ -1,5 +1,5 @@
-pragma solidity ^0.8.0;
-pragma experimental ABIEncoderV2;
+// SPDX-License-Identifier: AGPLv3
+pragma solidity 0.8.4;
 
 import {
     ISuperfluid,
@@ -8,66 +8,60 @@ import {
     ISuperAgreement,
     ContextDefinitions,
     SuperAppDefinitions
-} from "@superfluid/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+} from "./superfluid/interfaces/superfluid/ISuperfluid.sol";
 
 // When ready to move to leave Remix, change imports to follow this pattern:
 // "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 
 import {
     IConstantFlowAgreementV1
-} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
+} from "./superfluid/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import {
     SuperAppBase
-} from "@superfluid-finance/ethereum-contracts/contracts/apps/SuperAppBase.sol";
+} from "./superfluid/apps/SuperAppBase.sol";
 
 contract RedirectAll is SuperAppBase {
 
-    ISuperfluid private _host; // host
-    IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
-    ISuperToken private _acceptedToken; // accepted token
+    ISuperfluid public host; // host
+    IConstantFlowAgreementV1 public cfa; // the stored constant flow agreement class address
+    ISuperToken public acceptedToken; // accepted token
     
-    mapping(uint256 => address) public _subscriptions; // tokenId to owner address
+    mapping(uint256 => address) public subscriptions; // tokenId to owner address
 
-    mapping(address => uint256) public _pendingsubs;
+    mapping(address => uint256) public pendingSubs;
 
-    mapping(address => uint256) public _subscribers;
+    mapping(address => uint256) public subscribers;
     
-    int96 public _expectedInflow;
+    int96 public expectedInflow;
 
     constructor(
-        ISuperfluid host,
-        IConstantFlowAgreementV1 cfa,
-        ISuperToken acceptedToken,
-        int96 expectedInflow)
-        
+        ISuperfluid _host,
+        IConstantFlowAgreementV1 _cfa,
+        ISuperToken _acceptedToken,
+        int96 _expectedInflow)
         {
-        require(address(host) != address(0), "host is zero address");
-        require(address(cfa) != address(0), "cfa is zero address");
-        require(address(acceptedToken) != address(0), "acceptedToken is zero address");
-        require(address(receiver) != address(0), "receiver is zero address");
-        require(!host.isApp(ISuperApp(receiver)), "receiver is an app");
+        require(address(_host) != address(0), "host is zero address");
+        require(address(_cfa) != address(0), "cfa is zero address");
+        require(address(_acceptedToken) != address(0), "acceptedToken is zero address");
 
-        _host = host;
-        _cfa = cfa;
-        _acceptedToken = acceptedToken;
-        _expectedInflow = expectedInflow;
+        host = _host;
+        cfa = _cfa;
+        acceptedToken = _acceptedToken;
+        expectedInflow = _expectedInflow;
 
-        uint256 configWord =
-            SuperAppDefinitions.APP_LEVEL_FINAL |
-            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
+        uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL;
 
-        _host.registerApp(configWord);
+        host.registerApp(configWord);
     }
 
+    event SubscriptionDeleted(uint256 tokenId, address sender);
 
     /**************************************************************************
      * Redirect Logic
      *************************************************************************/
 
-    function checkSubscription(tokenId)
+    function checkSubscription(uint256 tokenId)
         external view
         returns (
             uint256 startTime,
@@ -77,85 +71,25 @@ contract RedirectAll is SuperAppBase {
     {
         address _sender = subscriptions[tokenId];
         if (_sender != address(0)) {
-            (startTime, flowRate,,) = _cfa.getFlow(_acceptedToken, _sender, address(this));
+            (startTime, flowRate,,) = cfa.getFlow(acceptedToken, _sender, address(this));
             receiver = _sender;
         }
     }
 
-    event SubscriptionDeleted(address sender); //what is this?
-
-    /// @dev If a new stream is opened, or an existing one is opened
-    function _updateOutflow(bytes calldata ctx)
-        private
-        returns (bytes memory newCtx)
-    {
-      newCtx = ctx;
-      // @dev This will give me the new flowRate, as it is called in after callbacks
-      int96 netFlowRate = _cfa.getNetFlow(_acceptedToken, address(this));
-      (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, address(this), _receiver); // CHECK: unclear what happens if flow doesn't exist.
-      int96 inFlowRate = netFlowRate + outFlowRate;
-
-      // @dev If inFlowRate === 0, then delete existing flow.
-      if (inFlowRate == int96(0)) {
-        // @dev if inFlowRate is zero, delete outflow.
-          (newCtx, ) = _host.callAgreementWithContext(
-              _cfa,
-              abi.encodeWithSelector(
-                  _cfa.deleteFlow.selector,
-                  _acceptedToken,
-                  address(this),
-                  _receiver,
-                  new bytes(0) // placeholder
-              ),
-              "0x",
-              newCtx
-          );
-        } else if (outFlowRate != int96(0)){
-        (newCtx, ) = _host.callAgreementWithContext(
-            _cfa,
-            abi.encodeWithSelector(
-                _cfa.updateFlow.selector,
-                _acceptedToken,
-                _receiver,
-                inFlowRate,
-                new bytes(0) // placeholder
-            ),
-            "0x",
-            newCtx
-        );
-      } else {
-      // @dev If there is no existing outflow, then create new flow to equal inflow
-          (newCtx, ) = _host.callAgreementWithContext(
-              _cfa,
-              abi.encodeWithSelector(
-                  _cfa.createFlow.selector,
-                  _acceptedToken,
-                  _receiver,
-                  inFlowRate,
-                  new bytes(0) // placeholder
-              ),
-              "0x",
-              newCtx
-          );
-      }
-    }
-
-    function _deleteSubscription( uint256 tokenId) internal {
+    function _deleteTokenSubscription( uint256 tokenId) internal returns (bytes memory newCtx) {
         
-        if (_subscriptions[tokenId] == address(0)) return ;
-        // @dev delete flow from the old NFT holder
-        // The nice thing here is that either party can delete a flow, even the receiver so that's what I'm doing here.
-        //TODO: check that the calls to deleteflow are equivalent from both sides of the agreement as this is copypastad from the opposite side (senders side)
-        
-        address sender = _subscriptions(tokenId);
-        (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, sender, address(this)); //CHECK: unclear what happens if flow doesn't exist.
+        if (subscriptions[tokenId] == address(0)) {
+            return newCtx;
+        } 
+        address sender = subscriptions[tokenId];
+        (,int96 outFlowRate,,) = cfa.getFlow(acceptedToken, sender, address(this)); //CHECK: unclear what happens if flow doesn't exist.
         if(outFlowRate > 0){
-          _host.callAgreement(
-              _cfa,
+          newCtx = host.callAgreement(
+              cfa,
               abi.encodeWithSelector(
-                  _cfa.deleteFlow.selector,
-                  _acceptedToken,
-                  _subscriptions[tokenId],
+                  cfa.deleteFlow.selector,
+                  acceptedToken,
+                  subscriptions[tokenId],
                   address(this),
                   new bytes(0)
               ),
@@ -163,68 +97,58 @@ contract RedirectAll is SuperAppBase {
           );
         }
         
-        _subscribers[sender] = 0;
-        _subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
+        subscribers[sender] = 0;
+        subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
 
         emit SubscriptionDeleted(tokenId, sender);
     }
 
+    function _deleteAgreementSubscription( bytes memory _ctx) internal returns (bytes memory newCtx) {
+        address sender = host.decodeCtx(_ctx).msgSender;
+        uint256 tokenId = subscribers[sender];
+        
+        subscribers[sender] = 0;
+        subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
+
+        emit SubscriptionDeleted(tokenId, sender);
+    }
+
+
     function _addSubscription(bytes32 agreementId, bytes calldata ctx) internal  {
-        address sender = _host.decodeCtx(_ctx).msgSender;
+        address sender = host.decodeCtx(ctx).msgSender;
 
         // Just for reference of what we actually get back. Can be compressed soon
-        (uint256 timestamp,int96 outFlowRate, uint256 deposit, uint256 owedDeposit) = _cfa.getFlowByID(_acceptedToken, aggreementId);
+        (uint256 timestamp,int96 outFlowRate, uint256 deposit, uint256 owedDeposit) = cfa.getFlowByID(acceptedToken, agreementId);
         
         
-        if (_pendingsubs[sender] != 0) { 
-            require(outFlowRate >= expectedInFlow, "Need to update the flow, too little for subscription guidelines");
+        if (pendingSubs[sender] != 0) { 
+            require(outFlowRate >= expectedInflow, "Need to update the flow, too little for subscription guidelines");
             // Require something about deposits maybe
 
-            _subscriptions[_pendingsubs[sender]] = sender ; 
-            _subscribers[sender] = _pendingsubs[sender];
-            _pendingsubs[sender] = 0;
+            subscriptions[pendingSubs[sender]] = sender ; 
+            subscribers[sender] = pendingSubs[sender];
+            pendingSubs[sender] = 0;
         }
     }
 
     function _checkSubscription(bytes32 agreementId, bytes calldata ctx) internal returns (bool success){
-        (,int96 outFlowRate, ,) = _cfa.getFlowByID(_acceptedToken, aggreementId);
+        (,int96 outFlowRate, ,) = cfa.getFlowByID(acceptedToken, agreementId);
 
-        if (outFlowRate >= expectedInFlow) {
-            return True;
+        if (outFlowRate >= expectedInflow) {
+            return true;
         }
         else {
-            address sender = _host.decodeCtx(_ctx).msgSender;
-            _subscriptions[_subscribers[sender]] = address(0);
-            _subscribers[sender] = 0;
+            address sender = host.decodeCtx(ctx).msgSender;
+            subscriptions[subscribers[sender]] = address(0);
+            subscribers[sender] = 0;
         }
 
     }
 
     function _addPendingSub(address subscriber, uint256 tokenId) internal {
-        _pendingsubs[subscriber] = tokenId;
+        pendingSubs[subscriber] = tokenId;
 
     }
-
-    
-    // This will be a problemmm, we need to wer
-    function createFlow(address sender) internal {
-        (newCtx, ) = _host.callAgreementWithContext(
-                _cfa,
-                abi.encodeWithSelector(
-                    _cfa.createFlow.selector,
-                    _acceptedToken,
-                    address(this),
-                    inFlowRate,
-                    new bytes(0) // placeholder
-                ),
-                "0x",
-                newCtx
-            );
-    }
-
-
-
-
 
     /**************************************************************************
      * SuperApp callbacks
@@ -241,11 +165,10 @@ contract RedirectAll is SuperAppBase {
         external override
         onlyExpected(_superToken, _agreementClass)
         onlyHost
-        returns (bytes memory newCtx)
+        returns (bytes memory /*newCtx*/)
     {
         // Update the dictionary after checking the outflow is the correct amount
-        
-        return _addSubscription(_agreementId, _ctx);
+        _addSubscription(_agreementId, _ctx);
     }
 
     function afterAgreementUpdated(
@@ -259,33 +182,31 @@ contract RedirectAll is SuperAppBase {
         external override
         onlyExpected(_superToken, _agreementClass)
         onlyHost
-        returns (bytes memory newCtx)
+        returns (bytes memory /*newCtx*/)
     {
-        return _checkSubscription(_agreementId, _ctx);
+        _checkSubscription(_agreementId, _ctx);
     }
 
     function afterAgreementTerminated(
         ISuperToken _superToken,
         address _agreementClass,
-        bytes32 ,//_agreementId,
+        bytes32 _agreementId,
         bytes calldata /*_agreementData*/,
         bytes calldata ,//_cbdata,
         bytes calldata _ctx
     )
         external override
         onlyHost
-        returns (bytes memory newCtx)
+        returns (bytes memory)
     {
         // According to the app basic law, we should never revert in a termination callback
         if (!_isSameToken(_superToken) || !_isCFAv1(_agreementClass)) return _ctx;
         
-        _deleteSubscription(_agreementId);
-        
-        return _updateOutflow(_ctx);
+        return _deleteAgreementSubscription(_ctx);
     }
 
     function _isSameToken(ISuperToken superToken) private view returns (bool) {
-        return address(superToken) == address(_acceptedToken);
+        return address(superToken) == address(acceptedToken);
     }
 
     function _isCFAv1(address agreementClass) private view returns (bool) {
@@ -294,7 +215,7 @@ contract RedirectAll is SuperAppBase {
     }
 
     modifier onlyHost() {
-        require(msg.sender == address(_host), "RedirectAll: support only one host");
+        require(msg.sender == address(host), "RedirectAll: support only one host");
         _;
     }
 
