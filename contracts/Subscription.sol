@@ -4,6 +4,10 @@ pragma solidity 0.8.4;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+
 
 /**
  * @title  SubscriptionService
@@ -14,6 +18,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract SubscriptionService is ERC721, Ownable, RedirectAll {
 
+using SafeERC20 for IERC20;
 uint256 public tokenIdEnum; 
 
 constructor (string memory _name, 
@@ -27,25 +32,34 @@ constructor (string memory _name,
       host,
       cfa,
       acceptedToken,
-      owner
+      owner,
      )
     {
 
     }
+    //Can I pass tokenIdEnum to redirectAll??
+
+function withdraw(uint256 amount, address token) external onlyOwner {
+    ISuperToken(acceptedToken).transfer(msg.sender, amount);
+
+}
 
 function buySubscription() external returns (uint256 tokenId) {
     _safeMint(msg.sender, tokenIdEnum++ );
-    openAgreement(); //TODO: Implement this
+    
+    checkSubscription(msg.sender);
+    
+    openAgreement(uint256 time, msg.sender); //TODO: Implement this
     
     // setup superfluid stream
 }
 
-function openAgreement(uint256 time) public {
+function openAgreement(uint256 time, address sender) public {
     uint256 amount = _expectedInflow * time;
-    require(ISuperToken(acceptedToken).balanceOf(msg.sender) > 2*amount, 
+    require(ISuperToken(acceptedToken).balanceOf(sender) > 2*amount, 
         "You don't have the sufficient funds, please acquire more superTokens");
     
-    _createFlow(msg.sender);
+    _createFlow(sender);
 
 
 function checkSubscription(address _check) external view returns (bool sub) {

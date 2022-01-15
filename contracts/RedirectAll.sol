@@ -54,10 +54,10 @@ contract RedirectAll is SuperAppBase {
         _expectedInflow = expectedInflow;
 
         uint256 configWord =
-            SuperAppDefinitions.APP_LEVEL_FINAL |
-            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
+            SuperAppDefinitions.APP_LEVEL_FINAL; 
+            // SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
+            // SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
+            // SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
 
         _host.registerApp(configWord);
     }
@@ -147,7 +147,7 @@ contract RedirectAll is SuperAppBase {
         // The nice thing here is that either party can delete a flow, even the receiver so that's what I'm doing here.
         //TODO: check that the calls to deleteflow are equivalent from both sides of the agreement as this is copypastad from the opposite side (senders side)
         
-        address sender = _subscriptions(tokenId);
+        address sender = _subscriptions[tokenId];
         (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, sender, address(this)); //CHECK: unclear what happens if flow doesn't exist.
         if(outFlowRate > 0){
           _host.callAgreement(
@@ -165,6 +165,9 @@ contract RedirectAll is SuperAppBase {
         
         _subscribers[sender] = 0;
         _subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
+
+        //TODO: COMMENT
+        _pendingsubs[sender] = tokenId;
 
         emit SubscriptionDeleted(tokenId, sender);
     }
@@ -207,7 +210,7 @@ contract RedirectAll is SuperAppBase {
 
     
     // This will be a problemmm, we need to wer
-    function createFlow(address sender) internal {
+    function createFlowFrom(address sender) internal {
         (newCtx, ) = _host.callAgreementWithContext(
                 _cfa,
                 abi.encodeWithSelector(
