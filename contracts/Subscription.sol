@@ -12,10 +12,25 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  *         user then gets access to an offchain subscription so long as they hold the nft and
  *         pay the subscription
  */
-contract SubscriptionService is ERC721, Ownable {
+contract SubscriptionService is ERC721, Ownable, RedirectAll {
 
 
-constructor (string memory _name, string memory _symbol) ERC721(_name, _symbol) {}
+constructor (string memory _name, 
+    string memory _symbol,
+    ISuperfluid host,
+    IConstantFlowAgreementV1 cfa,
+    ISuperToken acceptedToken
+    ) 
+    ERC721(_name, _symbol)
+    RedirectAll (
+      host,
+      cfa,
+      acceptedToken,
+      owner
+     )
+    {
+
+    }
 
 function buySubscription() external returns (uint256 tokenId) {
     // mint NFT
@@ -31,6 +46,26 @@ function checkSubscription(address _check) external view returns (bool sub) {
 function checkPaying(address _check) public view returns (bool paying) {
 
 }
+
+function _beforeTokenTransfer(
+address from,
+address to,
+uint256 tokenId
+) internal override {
+    _removeSender(tokenId);
+
+    _addPendingSub(to);
+    
+}
+
+function validateSubscription(
+
+) public returns(bool success) {
+    address subscriber = msg.sender();
+    createFlow();
+    
+}
+
 
 
 }
