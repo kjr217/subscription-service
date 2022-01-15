@@ -27,12 +27,14 @@ contract RedirectAll is SuperAppBase {
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
     ISuperToken private _acceptedToken; // accepted token
     
-    mapping(uint256 => address) private _subscriptions; // tokenId to owner address
+    mapping(uint256 => address) public _subscriptions; // tokenId to owner address
 
-    mapping(address => uint256) private _pendingsubs;
+    mapping(address => uint256) public _pendingsubs;
 
-    mapping(address => uint256) private _subscribers;
+    mapping(address => uint256) public _subscribers;
     
+    int96 public _expectedInflow;
+
     constructor(
         ISuperfluid host,
         IConstantFlowAgreementV1 cfa,
@@ -145,7 +147,7 @@ contract RedirectAll is SuperAppBase {
         // The nice thing here is that either party can delete a flow, even the receiver so that's what I'm doing here.
         //TODO: check that the calls to deleteflow are equivalent from both sides of the agreement as this is copypastad from the opposite side (senders side)
         
-        address sender = _subscriptions(tokenId)
+        address sender = _subscriptions(tokenId);
         (,int96 outFlowRate,,) = _cfa.getFlow(_acceptedToken, sender, address(this)); //CHECK: unclear what happens if flow doesn't exist.
         if(outFlowRate > 0){
           _host.callAgreement(
@@ -167,13 +169,12 @@ contract RedirectAll is SuperAppBase {
         emit SubscriptionDeleted(tokenId, sender);
     }
 
-    function _addSubscription(bytes32 agreementId) internal  {
-        ISuperfluid.Context memory decompiledContext = _host.decodeCtx(_ctx);
+    function _addSubscription(bytes32 agreementId, bytes calldata ctx) internal  {
+        address sender = _host.decodeCtx(_ctx).msgSender;
 
         // Just for reference of what we actually get back. Can be compressed soon
         (uint256 timestamp,int96 outFlowRate, uint256 deposit, uint256 owedDeposit) = _cfa.getFlowByID(_acceptedToken, aggreementId);
         
-        sender = _getSender(); // No idea how to do this currently
         
         if (_pendingsubs[sender] != 0) { 
             require(outFlowRate >= expectedInFlow, "Need to update the flow, too little for subscription guidelines");
@@ -185,18 +186,40 @@ contract RedirectAll is SuperAppBase {
         }
     }
 
-    function _checkSubscription(bytes32 agreementId) internal returns (bool success){
+    function _checkSubscription(bytes32 agreementId, bytes calldata ctx) internal returns (bool success){
         (,int96 outFlowRate, ,) = _cfa.getFlowByID(_acceptedToken, aggreementId);
 
         if (outFlowRate >= expectedInFlow) {
             return True;
         }
         else {
-            sender = _getSender();
+            address sender = _host.decodeCtx(_ctx).msgSender;
             _subscriptions[_subscribers[sender]] = address(0);
             _subscribers[sender] = 0;
         }
 
+    }
+
+    function _addPendingSub(address subscriber, uint256 tokenId) internal {
+        _pendingsubs[subscriber] = tokenId;
+
+    }
+
+    
+    // This will be a problemmm, we need to wer
+    function createFlow(address sender) internal {
+        (newCtx, ) = _host.callAgreementWithContext(
+                _cfa,
+                abi.encodeWithSelector(
+                    _cfa.createFlow.selector,
+                    _acceptedToken,
+                    address(this),
+                    inFlowRate,
+                    new bytes(0) // placeholder
+                ),
+                "0x",
+                newCtx
+            );
     }
 
 
@@ -222,7 +245,7 @@ contract RedirectAll is SuperAppBase {
     {
         // Update the dictionary after checking the outflow is the correct amount
         
-        return _addSubscription(_agreementId);
+        return _addSubscription(_agreementId, _ctx);
     }
 
     function afterAgreementUpdated(
@@ -238,7 +261,7 @@ contract RedirectAll is SuperAppBase {
         onlyHost
         returns (bytes memory newCtx)
     {
-        return _checkSubscription(_agreementId);
+        return _checkSubscription(_agreementId, _ctx);
     }
 
     function afterAgreementTerminated(
