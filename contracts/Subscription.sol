@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract SubscriptionService is ERC721, Ownable, RedirectAll {
 
+uint256 public tokenIdEnum; 
 
 constructor (string memory _name, 
     string memory _symbol,
@@ -33,9 +34,19 @@ constructor (string memory _name,
     }
 
 function buySubscription() external returns (uint256 tokenId) {
-    // mint NFT
+    _safeMint(msg.sender, tokenIdEnum++ );
+    openAgreement(); //TODO: Implement this
+    
     // setup superfluid stream
 }
+
+function openAgreement(uint256 time) public {
+    uint256 amount = _expectedInflow * time;
+    require(ISuperToken(acceptedToken).balanceOf(msg.sender) > 2*amount, 
+        "You don't have the sufficient funds, please acquire more superTokens");
+    
+    _createFlow(msg.sender);
+
 
 function checkSubscription(address _check) external view returns (bool sub) {
     if (balanceOf(_check) > 0 && checkPaying(_check)) {
@@ -44,7 +55,10 @@ function checkSubscription(address _check) external view returns (bool sub) {
 }
 
 function checkPaying(address _check) public view returns (bool paying) {
-
+    (,int96 outFlowRate,,) = cfa.getFlow(_acceptedToken, _check, address(this));
+    if (outFlowRate >= _expectedInflow) {
+        paying = True;
+    }
 }
 
 function _beforeTokenTransfer(
@@ -52,9 +66,9 @@ address from,
 address to,
 uint256 tokenId
 ) internal override {
-    _removeSender(tokenId);
+    _deleteSubscription(tokenId);
 
-    _addPendingSub(to);
+    _addPendingSub(to, tokenId);
     
 }
 
