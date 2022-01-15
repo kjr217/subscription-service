@@ -6,6 +6,16 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./RedirectAll.sol";
+
+import {
+    ISuperfluid,
+    ISuperToken,
+    ISuperApp,
+    ISuperAgreement,
+    ContextDefinitions,
+    SuperAppDefinitions
+} from "./superfluid/interfaces/superfluid/ISuperfluid.sol";
+
 /**
  * @title  SubscriptionService
  * @author LBL
@@ -14,16 +24,14 @@ import "./RedirectAll.sol";
  *         pay the subscription
  */
 contract SubscriptionService is ERC721, Ownable, RedirectAll {
-
-using SafeERC20 for IERC20;
 uint256 public tokenIdEnum; 
 
 constructor (
     string memory _name, 
     string memory _symbol,
-    ISuperfluid _host,
-    IConstantFlowAgreementV1 _cfa,
-    ISuperToken _acceptedToken,
+    address _host,
+    address _cfa,
+    address _acceptedToken,
     int96 _expectedInflow
     )
     ERC721(_name, _symbol)
@@ -61,6 +69,4 @@ uint256 tokenId
     _deleteTokenSubscription(tokenId);
     _addPendingSub(to, tokenId);
 }
-
-
 }

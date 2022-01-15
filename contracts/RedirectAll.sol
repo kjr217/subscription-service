@@ -36,27 +36,23 @@ contract RedirectAll is SuperAppBase {
     int96 public expectedInflow;
 
     constructor(
-        ISuperfluid _host,
-        IConstantFlowAgreementV1 _cfa,
-        ISuperToken _acceptedToken,
+        address _host,
+        address _cfa,
+        address _acceptedToken,
         int96 _expectedInflow)
         {
-        require(address(_host) != address(0), "host is zero address");
-        require(address(_cfa) != address(0), "cfa is zero address");
-        require(address(_acceptedToken) != address(0), "acceptedToken is zero address");
-
-        host = _host;
-        cfa = _cfa;
-        acceptedToken = _acceptedToken;
+        host = ISuperfluid(_host);
+        cfa = IConstantFlowAgreementV1(_cfa);
+        acceptedToken = ISuperToken(_acceptedToken);
         expectedInflow = _expectedInflow;
-
-        uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL;
-
-        host.registerApp(configWord);
     }
 
     event SubscriptionDeleted(uint256 tokenId, address sender);
-
+    function registerApp() external {
+        uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL;
+        host.registerApp(configWord);
+        // return acceptedToken.balanceOf(address(this));
+    }
     /**************************************************************************
      * Redirect Logic
      *************************************************************************/
@@ -98,9 +94,7 @@ contract RedirectAll is SuperAppBase {
         
         subscribers[sender] = 0;
         subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
-
-        //TODO: COMMENT
-        _pendingsubs[sender] = tokenId;
+        pendingSubs[sender] = tokenId;
 
         emit SubscriptionDeleted(tokenId, sender);
     }
