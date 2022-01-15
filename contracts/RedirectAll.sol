@@ -77,7 +77,6 @@ contract RedirectAll is SuperAppBase {
     }
 
     function _deleteTokenSubscription( uint256 tokenId) internal returns (bytes memory newCtx) {
-        
         if (subscriptions[tokenId] == address(0)) {
             return newCtx;
         } 
@@ -99,6 +98,9 @@ contract RedirectAll is SuperAppBase {
         
         subscribers[sender] = 0;
         subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
+
+        //TODO: COMMENT
+        _pendingsubs[sender] = tokenId;
 
         emit SubscriptionDeleted(tokenId, sender);
     }

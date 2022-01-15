@@ -15,6 +15,7 @@ import "./RedirectAll.sol";
  */
 contract SubscriptionService is ERC721, Ownable, RedirectAll {
 
+using SafeERC20 for IERC20;
 uint256 public tokenIdEnum; 
 
 constructor (
