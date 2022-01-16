@@ -107,7 +107,6 @@ function _deleteTokenSubscription( uint256 tokenId) internal returns (bytes memo
     subscribers[sender] = 0;
     subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
     pendingSubs[sender] = tokenId;
-
     emit SubscriptionDeleted(tokenId, sender);
 }
 
@@ -117,7 +116,7 @@ function _deleteAgreementSubscription( bytes memory _ctx) internal returns (byte
     
     subscribers[sender] = 0;
     subscriptions[tokenId] = address(0); // this token is now up for grabs (by the holder of the NFT)
-
+    _burn(tokenId);
     emit SubscriptionDeleted(tokenId, sender);
 }
 
@@ -147,8 +146,10 @@ function _checkSubscription(bytes32 agreementId, bytes calldata ctx) internal re
     }
     else {
         address sender = host.decodeCtx(ctx).msgSender;
+        uint256 tokenId = subscribers[sender];
         subscriptions[subscribers[sender]] = address(0);
         subscribers[sender] = 0;
+        _burn(tokenId);
     }
 
 }
@@ -236,6 +237,8 @@ modifier onlyExpected(ISuperToken superToken, address agreementClass) {
 function buySubscription() external returns (uint256 tokenId) {
     require(checkPaying(msg.sender), "pay ur sub mate");
     _safeMint(msg.sender, tokenIdEnum++ );
+    subscriptions[tokenIdEnum] = msg.sender;
+    subscribers[msg.sender] = tokenIdEnum;
 }
 
 function validateSubscription(address _check) external view returns (bool sub) {
