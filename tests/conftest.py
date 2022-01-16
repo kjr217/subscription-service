@@ -3,7 +3,8 @@ import time
 import constants_mainnet
 from brownie import (
     accounts,
-    SubscriptionService
+    SubscriptionService,
+    Contract
 )
 
 
@@ -16,6 +17,10 @@ def isolate_func(fn_isolation):
 @pytest.fixture
 def deployer():
     yield accounts[1]
+
+@pytest.fixture
+def cfav1():
+    yield Contract.from_explorer(constants_mainnet.CFA, as_proxy_for=constants_mainnet.CFA_PROXY)
 
 @pytest.fixture
 def contracts(accounts, deployer):

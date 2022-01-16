@@ -45,14 +45,11 @@ contract RedirectAll is SuperAppBase {
         cfa = IConstantFlowAgreementV1(_cfa);
         acceptedToken = ISuperToken(_acceptedToken);
         expectedInflow = _expectedInflow;
+        uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL;
+        host.registerApp(configWord);
     }
 
     event SubscriptionDeleted(uint256 tokenId, address sender);
-    function registerApp() external {
-        uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL;
-        host.registerApp(configWord);
-        // return acceptedToken.balanceOf(address(this));
-    }
     /**************************************************************************
      * Redirect Logic
      *************************************************************************/
